@@ -1,13 +1,13 @@
 export {
-  ModelRecord, AppConfig
+  type ModelRecord, type AppConfig
 } from "./config";
 
 
 export {
-  InitProgressCallback,
-  InitProgressReport,
-  ChatOptions,
-  ChatInterface
+  type InitProgressCallback,
+  type InitProgressReport,
+  type ChatOptions,
+  type ChatInterface
 } from "./types";
 
 export {
