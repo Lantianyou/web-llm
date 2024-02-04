@@ -32,7 +32,7 @@ export class ChatModule implements ChatInterface {
 
     const findModelRecord = () => {
       const matchedItem = appConfig?.model_list.find(
-        item => item.local_id == localId
+        item => item.local_id === localId
       );
       if (matchedItem !== undefined) return matchedItem;
       throw Error("Cannot find model_url for " + localId);
@@ -47,8 +47,10 @@ export class ChatModule implements ChatInterface {
 
     // load config
     const configUrl = new URL("mlc-chat-config.json", modelUrl).href;
+    const fetchedConfigCache = await configCache.fetchWithCache(configUrl)
+    const fetchedConfig = await fetchedConfigCache.json();
     const config = {
-      ...(await (await configCache.fetchWithCache(configUrl)).json()),
+      ...fetchedConfig,
       ...chatOpts
     } as ChatConfig;
 
@@ -93,11 +95,11 @@ export class ChatModule implements ChatInterface {
 
     // detect GPU
     const gpuDetectOutput = await tvmjs.detectGPUDevice();
-    if (gpuDetectOutput == undefined) {
+    if (!gpuDetectOutput) {
       throw Error("Cannot find WebGPU in the environment");
     }
     let gpuLabel = "WebGPU";
-    if (gpuDetectOutput.adapterInfo.description.length != 0) {
+    if (gpuDetectOutput.adapterInfo.description.length !== 0) {
       gpuLabel += " - " + gpuDetectOutput.adapterInfo.description;
     } else {
       gpuLabel += " - " + gpuDetectOutput.adapterInfo.vendor;
@@ -105,7 +107,7 @@ export class ChatModule implements ChatInterface {
     if (modelRecord.required_features !== undefined) {
       for (const feature of modelRecord.required_features) {
         if (!gpuDetectOutput.device.features.has(feature)) {
-          if (feature == "shader-f16") {
+          if (feature === "shader-f16") {
             throw Error(
               "This model requires WebGPU extension shader-f16, " +
               "which is not enabled in this browser. " +
@@ -155,7 +157,7 @@ export class ChatModule implements ChatInterface {
       }
       counter += 1;
       await this.decode();
-      if (counter % streamInterval == 0 && progressCallback !== undefined) {
+      if (counter % streamInterval === 0 && progressCallback !== undefined) {
         progressCallback(counter, this.getMessage());
       }
     }
@@ -266,7 +268,7 @@ export class ChatRestModule implements ChatInterface {
     progressCallback?: GenerateProgressCallback,
     streamInterval = 1,
   ): Promise<string> {
-    if (streamInterval == 0) {
+    if (streamInterval === 0) {
       const response = await fetch('http://localhost:8000/v1/chat/completions', {
         method: "POST",
         headers: { "Content-type": "application/json" },
@@ -278,7 +280,7 @@ export class ChatRestModule implements ChatInterface {
       })
         .then((response) => response.json())
         .then((json) => {
-          let msg = json["choices"][0]["message"]["content"] as string;
+          const msg = json["choices"][0]["message"]["content"] as string;
           if (progressCallback !== undefined) {
             progressCallback(0, msg);
           }
@@ -286,8 +288,8 @@ export class ChatRestModule implements ChatInterface {
         });
       return response;
     } else {
-      var msg = "";
-      const response = await fetch('http://localhost:8000/v1/chat/completions', {
+      let msg = "";
+      fetch('http://localhost:8000/v1/chat/completions', {
         method: "POST",
         headers: { "Content-type": "application/json" },
         body: JSON.stringify({
@@ -296,29 +298,25 @@ export class ChatRestModule implements ChatInterface {
           stream: true
         })
       })
-        .then((response) => {
-          const reader = response.body!.getReader();
-          reader.read().then(function pump({ done, value }): any {
-            if (done) {
-              if (progressCallback !== undefined) {
-                progressCallback(0, msg);
-              }
-              return;
-            }
-            const jsonString = Buffer.from(value).toString('utf8').substring(6);
-            const parsedData = JSON.parse(jsonString);
-            const delta = parsedData["choices"][0]["delta"]["content"] as string;
-            // Hack to ignore chunks once we get the EOS token
-            if (delta.includes("<")) {
-              return;
-            }
-            msg += delta;
-            if (progressCallback !== undefined) {
-              progressCallback(0, msg);
-            }
-            return reader.read().then(pump);
-          });
+      .then((response) => {
+        const reader = response.body!.getReader();
+        reader.read().then(function pump({ done, value }): any {
+          if (done) {
+            progressCallback?.(0, msg);
+            return;
+          }
+          const jsonString = Buffer.from(value).toString('utf8').substring(6);
+          const parsedData = JSON.parse(jsonString);
+          const delta = parsedData["choices"][0]["delta"]["content"] as string;
+          // Hack to ignore chunks once we get the EOS token
+          if (delta.includes("<")) {
+            return;
+          }
+          msg += delta;
+          progressCallback?.(0, msg);
+          return reader.read().then(pump);
         });
+      });
       return msg;
     }
   }
@@ -353,6 +351,6 @@ export async function hasModelInCache(localId: string, appConfig?: AppConfig): P
     throw Error("Cannot find model_url for " + localId);
   }
   const modelRecord = findModelRecord();
-  let modelUrl = modelRecord.model_url;
+  const modelUrl = modelRecord.model_url;
   return tvmjs.hasNDArrayInCache(modelUrl, "webllm/model");
 }
